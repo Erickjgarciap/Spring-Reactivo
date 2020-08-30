@@ -3,7 +3,12 @@ package com.spring.reactive;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Timer;
+import java.util.TimerTask;
+import java.util.concurrent.CountDownLatch;
 
+import org.reactivestreams.Subscriber;
+import org.reactivestreams.Subscription;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.CommandLineRunner;
@@ -38,7 +43,95 @@ public class SpringReactiveApplication implements CommandLineRunner {
 		//ejemploUsuarioComentariosZipWith2();
 		//ejemploZipWithRango();
 		//ejemploIntervalZip();
-		ejemploDelay();
+		//ejemploDelay();
+		//ejemploIntervaloInfinito();
+		ejemploContrapecion();
+	}
+	
+	public void ejemploContrapecion() {
+		Flux.range(1, 10)
+		.log()
+		.subscribe(new Subscriber<Integer>() {
+			private Subscription s;
+			private Integer limite =2;
+			private Integer consumido = 0;
+			@Override
+			public void onSubscribe(Subscription s) {
+				// TODO Auto-generated method stub
+				this.s=s;
+				s.request(limite);
+				
+				
+			}
+
+			@Override
+			public void onNext(Integer t) {
+				// TODO Auto-generated method stub
+				log.info(t.toString());
+				consumido++;
+				if (consumido == limite) {
+					consumido=0;
+					s.request(limite);
+				}
+			}
+
+			@Override
+			public void onError(Throwable t) {
+				// TODO Auto-generated method stub
+				
+			}
+
+			@Override
+			public void onComplete() {
+				// TODO Auto-generated method stub
+				
+			}});
+		
+	}
+	
+	public void ejemploIntervaloInfinitoDesdeCreate() {
+		
+		Flux.create(emitter->{
+			Timer timer = new Timer();
+			timer.schedule(new TimerTask() {
+				private Integer contador=0;
+				@Override
+				public void run() {
+					
+					emitter.next(++contador);
+					if (contador==10) {
+						timer.cancel();
+						emitter.complete();
+					}
+					if (contador==5) {
+						timer.cancel();
+						emitter.error(new InterruptedException("Error, se ha detenido el flux"));
+					}
+				}				
+			},1000,1000);
+		})
+		.subscribe(next ->log.info(next.toString()),
+				   error -> log.error(error.getMessage()),
+				   ()->log.info("Se ha terminado el flujo"));
+	}
+	public void ejemploIntervaloInfinito() throws InterruptedException{
+		
+		CountDownLatch latch = new CountDownLatch(1);
+		
+		
+		Flux.interval(Duration.ofSeconds(1))
+		.doOnTerminate(latch::countDown)
+		.flatMap(i-> {
+			if (i>=5)
+				return Flux.error(new InterruptedException("Solo hasta 5!"));
+		
+			return Flux.just(i);
+			
+		})
+		.map(i-> "Hola " + i)
+		.retry(2)
+		.subscribe(s->log.info(s), e-> log.error(e.getMessage()));
+		latch.await();
 	}
 	public void ejemploDelay() {
 		Flux <Integer> rango = Flux.range(1, 12)
@@ -158,6 +251,7 @@ public class SpringReactiveApplication implements CommandLineRunner {
 		});
 
 	}
+
 	public void ejemploToString() throws Exception {
 		// TODO Auto-generated method stub
 		List<Usuario> usuarios = new ArrayList<>();
